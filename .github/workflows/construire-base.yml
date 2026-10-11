@@ -2,7 +2,6 @@ name: Construire la base
 
 on:
   schedule:
-    - cron: '13 3 * * 1'   # chaque lundi vers 5 h (heure de Paris)
   workflow_dispatch:
     inputs:
       nb_mangas:
