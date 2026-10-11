@@ -102,10 +102,32 @@ function ecrireIndex() {
   return ids.length;
 }
 
+// Tirage sans serveur : une case numérotée par personnage (data/tirage/0.json, 1.json, …), chacune contenant
+// une fiche complète. TRMNL tire lui-même un numéro au hasard dans l'URL de polling (random_number).
+const TIRAGE = path.join(RACINE, 'data', 'tirage');
+function publierTirage(base) {
+  const ids = fs.readdirSync(FICHES).filter((f) => f.endsWith('.json')).map((f) => parseInt(f, 10)).sort((a, b) => a - b);
+  if (!ids.length) return;
+  const depot = process.env.GITHUB_REPOSITORY || 'nbbou81000/trmnl-manga-scouter';
+  const total = String(ids.length).replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
+  fs.rmSync(TIRAGE, { recursive: true, force: true });
+  fs.mkdirSync(TIRAGE, { recursive: true });
+  ids.forEach((id, n) => {
+    const f = JSON.parse(fs.readFileSync(path.join(FICHES, `${id}.json`), 'utf8'));
+    f.fans = String(f.fans || 0).replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
+    f.image = `https://raw.githubusercontent.com/${depot}/main/images/${id}.png`;
+    f.total_personnages = total;
+    f.total_mangas = base.mangas.length;
+    fs.writeFileSync(path.join(TIRAGE, `${n}.json`), JSON.stringify(f));
+  });
+  fs.writeFileSync(path.join(RACINE, 'data', 'count.json'), JSON.stringify({ count: ids.length, max: ids.length - 1 }));
+  console.log(`Tirage publié : ${ids.length} cases. Dans l'URL de polling de TRMNL, mets random_number: 0, ${ids.length - 1}`);
+}
+
 function enregistrer(message) {
   const total = ecrireIndex();
   try {
-    execSync('git add data images', { stdio: 'inherit' });
+    execSync('git add -A data images', { stdio: 'inherit' });
     execSync(`git diff --cached --quiet || git commit -q -m "${message} (${total} fiches)"`, { stdio: 'inherit', shell: '/bin/bash' });
     execSync('git pull -q --rebase && git push -q', { stdio: 'inherit', shell: '/bin/bash' });
   } catch (e) {
@@ -187,9 +209,10 @@ async function main() {
     if (faits % ENREGISTRER_TOUS === 0) enregistrer('Corpus : enregistrement intermédiaire');
   }
 
+  publierTirage(base);
   enregistrer('Corpus mis à jour');
   console.log(`Terminé : ${faits} fiches ajoutées, ${echecs} échecs, ${ecrireIndex()} fiches au total.`);
 }
 
 main().catch((e) => { console.error(e); process.exit(1); });
-                  
+                   
