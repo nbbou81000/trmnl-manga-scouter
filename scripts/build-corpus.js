@@ -14,7 +14,6 @@ const BASE = path.join(RACINE, 'data', 'base.json');
 const FICHES = path.join(RACINE, 'data', 'fiches');
 const IMAGES = path.join(RACINE, 'images');
 const INDEX = path.join(RACINE, 'data', 'index.json');
-const API = 'https://api.jikan.moe/v4';
 const MISTRAL_KEY = process.env.MISTRAL_API_KEY;
 const BUDGET_MIN = parseInt(process.env.MAX_MINUTES || '300', 10); // l'Action s'arrête proprement avant la limite de 6 h
 const ENREGISTRER_TOUS = 250;
@@ -23,29 +22,26 @@ const pause = (ms) => new Promise((r) => setTimeout(r, ms));
 const debut = Date.now();
 const tempsEcoule = () => (Date.now() - debut) / 60000;
 
-async function get(url) {
-  for (let essai = 1; essai <= 5; essai++) {
-    await pause(1200);
-    try {
-      const rep = await fetch(url, { headers: { 'User-Agent': 'trmnl-manga-scouter (perso)' } });
-      if (rep.ok) return await rep.json();
-      if (rep.status === 404) return null;
-    } catch (e) { /* on réessaie */ }
-    await pause(3000 * essai);
-  }
-  return null;
-}
-
-function analyserBio(about) {
+function analyserBio(description) {
+  // Descriptions AniList : "__Taille :__ 172 cm", spoilers entre ~! et !~, liens markdown, balises HTML.
+  const propre = (description || '')
+    .replace(/~!(.|\n)*?!~/g, '')
+    .replace(/\[([^\]]*)\]\([^)]*\)/g, '$1')
+    .replace(/<br\s*\/?>/gi, '\n')
+    .replace(/<[^>]+>/g, '')
+    .replace(/\r/g, '');
   const stats = [];
   const texte = [];
-  for (const brute of (about || '').replace(/\r/g, '').split('\n')) {
+  for (const brute of propre.split('\n')) {
     const l = brute.trim();
     if (!l) continue;
-    if (/^\(?sources?\s*:/i.test(l) || /mal rewrite/i.test(l)) continue;
-    const m = l.match(/^([A-Z][A-Za-z' ()/-]{1,24}):\s*(.{1,60})$/);
-    if (m && texte.length === 0 && stats.length < 8) stats.push({ label: m[1].trim(), valeur: m[2].trim() });
-    else texte.push(l);
+    if (/^\(?sources?\s*:/i.test(l)) continue;
+    const m = l.match(/^(?:__|\*\*)?([A-Z][A-Za-z' ()/-]{1,24}):?(?:__|\*\*)?:?\s*(.{1,60})$/);
+    if (m && /^(__|\*\*)/.test(l) && texte.length === 0 && stats.length < 8) {
+      stats.push({ label: m[1].trim(), valeur: m[2].replace(/[_*]/g, '').trim() });
+    } else {
+      texte.push(l.replace(/__|\*\*/g, '').replace(/(^|\s)_([^_]+)_/g, '$1$2'));
+    }
   }
   return { stats, texte: texte.join(' ').replace(/\s+/g, ' ').trim() };
 }
@@ -84,7 +80,7 @@ Réponds uniquement en JSON : {"resume": "...", "stats": [{"label": "...", "vale
   throw new Error('Mistral indisponible');
 }
 
-// Image officielle MyAnimeList préparée pour l'e-ink : niveaux de gris, agrandie, contraste et netteté
+// Image officielle AniList préparée pour l'e-ink : niveaux de gris, agrandie, contraste et netteté
 // renforcés, réduite à 16 niveaux de gris pour garder des fichiers légers (environ 50 à 100 Ko).
 async function preparerImage(url, destination) {
   const rep = await fetch(url);
@@ -140,31 +136,38 @@ async function main() {
       break;
     }
     const manga = base.mangas[p.m];
-    const res = await get(`${API}/characters/${p.id}/full`);
-    const c = res && res.data;
-    if (!c) { echecs++; continue; }
-
     try {
-      await preparerImage(c.images.jpg.image_url, path.join(IMAGES, `${p.id}.png`));
+      await preparerImage(p.image, path.join(IMAGES, `${p.id}.png`));
     } catch (e) {
-      console.warn(`${c.name} : image impossible (${e.message}), personnage ignoré.`);
+      console.warn(`${p.nom} : image impossible (${e.message}${e.cause ? ' — ' + e.cause.message : ''}), personnage ignoré.`);
       echecs++;
       continue;
     }
 
-    const { stats, texte } = analyserBio(c.about);
+    const bio = analyserBio(p.description);
+    // Caractéristiques structurées d'AniList d'abord, puis celles trouvées en tête de biographie.
+    const stats = [
+      p.genre && { label: 'Gender', valeur: p.genre },
+      p.age && { label: 'Age', valeur: String(p.age) },
+      p.anniversaire && { label: 'Birthday', valeur: p.anniversaire },
+      p.groupe_sanguin && { label: 'Blood type', valeur: p.groupe_sanguin },
+    ].filter(Boolean);
+    for (const s of bio.stats) {
+      if (!stats.some((x) => x.label.toLowerCase() === s.label.toLowerCase())) stats.push(s);
+    }
+    const texte = bio.texte;
     const fiche = {
       id: p.id,
-      nom: c.name,
-      nom_kanji: c.name_kanji || '',
-      surnom: (c.nicknames || [])[0] || '',
+      nom: p.nom,
+      nom_natif: p.nom_natif,
+      surnom: p.surnom,
       manga: manga.titre,
       auteurs: manga.auteurs.join(', '),
-      rang_manga: manga.rang_popularite,
-      role: p.role === 'Main' ? 'Principal' : 'Secondaire',
-      fans: c.favorites || 0,
+      rang_manga: manga.rang,
+      role: p.role === 'MAIN' ? 'Principal' : 'Secondaire',
+      fans: p.fans,
       stats: stats.slice(0, 6),
-      resume: couper(texte, 330) || `${c.name} appears in ${manga.titre}.`,
+      resume: couper(texte, 330) || `${p.nom} appears in ${manga.titre}.`,
       langue: 'en',
     };
 
@@ -174,7 +177,7 @@ async function main() {
         if (fr.resume) { fiche.resume = couper(fr.resume, 360); fiche.langue = 'fr'; }
         if (Array.isArray(fr.stats)) fiche.stats = fr.stats.slice(0, 6);
       } catch (e) {
-        console.warn(`${c.name} : traduction impossible (${e.message}), fiche en anglais.`);
+        console.warn(`${p.nom} : traduction impossible (${e.message}), fiche en anglais.`);
       }
     }
 
@@ -189,3 +192,4 @@ async function main() {
 }
 
 main().catch((e) => { console.error(e); process.exit(1); });
+                  
