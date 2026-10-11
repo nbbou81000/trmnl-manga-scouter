@@ -9,6 +9,9 @@ on:
       max_par_manga:
         description: 'Nombre maximum de personnages par manga'
         default: '40'
+      series_completes:
+        description: 'Séries à inclure avec TOUS leurs personnages, séparées par des virgules (ex. Dragon Ball, One Piece)'
+        default: ''
 
 permissions:
   contents: write
@@ -30,6 +33,7 @@ jobs:
         env:
           NB_MANGAS: ${{ github.event.inputs.nb_mangas || '100' }}
           MAX_PAR_MANGA: ${{ github.event.inputs.max_par_manga || '40' }}
+          SERIES_COMPLETES: ${{ github.event.inputs.series_completes }}
         run: node scripts/build-db.js
       - name: Enregistrer
         run: |
