@@ -1,7 +1,6 @@
 name: Construire la base
 
 on:
-  schedule:
   workflow_dispatch:
     inputs:
       nb_mangas:
