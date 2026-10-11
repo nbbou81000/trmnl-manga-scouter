@@ -9,6 +9,9 @@ const API = 'https://graphql.anilist.co';
 const NB_MANGAS = parseInt(process.env.NB_MANGAS || '100', 10);
 const MAX_PAR_MANGA = parseInt(process.env.MAX_PAR_MANGA || '40', 10);
 const SORTIE = path.join(__dirname, '..', 'data', 'base.json');
+// Séries à inclure en entier (tous les personnages), séparées par des virgules, ex. "Dragon Ball, One Piece".
+const SERIES_COMPLETES = (process.env.SERIES_COMPLETES || '').split(',').map((x) => x.trim()).filter(Boolean);
+const MAX_SERIE_COMPLETE = 1000;
 
 const pause = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -72,6 +75,17 @@ const Q_PERSOS = `query ($id: Int, $page: Int) {
   }
 }`;
 
+const Q_RECHERCHE = `query ($search: String) {
+  Page(page: 1, perPage: 15) {
+    media(search: $search, type: MANGA, sort: SEARCH_MATCH) {
+      id
+      countryOfOrigin
+      title { romaji english }
+      staff(perPage: 6, sort: RELEVANCE) { edges { role node { name { full } } } }
+    }
+  }
+}`;
+
 function imageValide(url) {
   return url && !/\/default\.(jpg|png)/i.test(url);
 }
@@ -91,6 +105,25 @@ async function main() {
     }
     if (!data.Page.pageInfo.hasNextPage) break;
   }
+  // 1 bis. Les séries demandées en entier : tous les mangas dont le titre contient le nom cherché.
+  for (const nom of SERIES_COMPLETES) {
+    const data = await requete(Q_RECHERCHE, { search: nom });
+    if (!data) continue;
+    const cle = nom.toLowerCase();
+    for (const m of data.Page.media) {
+      const titres = [m.title.romaji, m.title.english].filter(Boolean).join(' | ').toLowerCase();
+      if (m.countryOfOrigin !== 'JP' || !titres.includes(cle)) continue;
+      const existant = mangas.find((x) => x.id === m.id);
+      if (existant) { existant.complet = true; continue; }
+      const auteurs = [...new Set(m.staff.edges
+        .filter((e) => /story|art|original creator/i.test(e.role))
+        .map((e) => e.node.name.full))].slice(0, 2);
+      mangas.push({ id: m.id, titre: m.title.english || m.title.romaji, titre_original: m.title.romaji, rang: 0, auteurs, complet: true });
+      console.log(`Série complète ajoutée : ${m.title.english || m.title.romaji}`);
+    }
+  }
+  // Les séries complètes passent en premier, pour que leurs personnages leur soient rattachés.
+  mangas.sort((a, b) => (b.complet ? 1 : 0) - (a.complet ? 1 : 0));
   console.log(`${mangas.length} mangas récupérés.`);
   if (mangas.length === 0) { console.error('Impossible de joindre AniList.'); process.exit(1); }
 
@@ -100,13 +133,14 @@ async function main() {
   for (let i = 0; i < mangas.length; i++) {
     const m = mangas[i];
     let ajoutes = 0;
-    for (let page = 1; ajoutes < MAX_PAR_MANGA; page++) {
+    const limite = m.complet ? MAX_SERIE_COMPLETE : MAX_PAR_MANGA;
+    for (let page = 1; ajoutes < limite; page++) {
       const data = await requete(Q_PERSOS, { id: m.id, page });
       if (!data || !data.Media) break;
       for (const e of data.Media.characters.edges) {
         const c = e.node;
-        if (ajoutes >= MAX_PAR_MANGA) break;
-        if (dejaVus.has(c.id) || !imageValide(c.image?.large) || e.role === 'BACKGROUND') continue;
+        if (ajoutes >= limite) break;
+        if (dejaVus.has(c.id) || !imageValide(c.image?.large) || (e.role === 'BACKGROUND' && !m.complet)) continue;
         dejaVus.add(c.id); // un personnage présent dans plusieurs séries reste rattaché à la plus populaire
         personnages.push({
           id: c.id,
