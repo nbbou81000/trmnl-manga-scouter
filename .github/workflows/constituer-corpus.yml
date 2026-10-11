@@ -1,8 +1,6 @@
 name: Constituer le corpus
 
 on:
-  schedule:
-    - cron: '13 5 * * 1'   # chaque lundi après la mise à jour de la base : ajoute les nouveaux personnages
   workflow_dispatch:
     inputs:
       max_fiches:
