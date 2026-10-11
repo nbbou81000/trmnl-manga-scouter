@@ -16,7 +16,7 @@ const IMAGES = path.join(RACINE, 'images');
 const INDEX = path.join(RACINE, 'data', 'index.json');
 const MISTRAL_KEY = process.env.MISTRAL_API_KEY;
 const BUDGET_MIN = parseInt(process.env.MAX_MINUTES || '300', 10); // l'Action s'arrête proprement avant la limite de 6 h
-const ENREGISTRER_TOUS = 250;
+const ENREGISTRER_TOUS = 150;
 
 const pause = (ms) => new Promise((r) => setTimeout(r, ms));
 const debut = Date.now();
