@@ -1,0 +1,42 @@
+name: Constituer le corpus
+
+on:
+  schedule:
+    - cron: '13 5 * * 1'   # chaque lundi après la mise à jour de la base : ajoute les nouveaux personnages
+  workflow_dispatch:
+    inputs:
+      max_fiches:
+        description: 'Nombre de fiches à générer (10 pour un test, 0 = tout le corpus)'
+        default: '10'
+      max_minutes:
+        description: 'Durée maximale de travail en minutes (relance l’Action si le corpus n’est pas fini)'
+        default: '300'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: corpus
+  cancel-in-progress: false
+
+jobs:
+  corpus:
+    runs-on: ubuntu-latest
+    timeout-minutes: 350
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Installer l'outil de traitement d'image
+        run: npm install --no-audit --no-fund
+      - name: Préparer git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+      - name: Récupérer les fiches et les images
+        env:
+          MISTRAL_API_KEY: ${{ secrets.MISTRAL_API_KEY }}
+          MAX_MINUTES: ${{ github.event.inputs.max_minutes || '300' }}
+          MAX_FICHES: ${{ github.event.inputs.max_fiches || '0' }}
+        run: node scripts/build-corpus.js
