@@ -1,36 +1,40 @@
-# Scouter manga — plugin TRMNL perso
+# Scouter — plugin TRMNL perso
 
-Une fiche de personnage tirée au hasard parmi les mangas les plus populaires de MyAnimeList, avec son image officielle préparée pour l'e-ink, renouvelée toutes les heures. Tout le corpus est stocké dans le dépôt.
+Une fiche de personnage tirée au hasard, façon « scouter », avec son image préparée pour l'e-ink. Deux univers au choix via une option du plugin : **manga** (AniList) ou **jeux vidéo** (IGDB), ou un mélange des deux.
 
-## Les trois Actions
+Aucun cron : tout le corpus est stocké dans le dépôt, et TRMNL tire lui-même un numéro au hasard dans l'URL de polling (`random_number`).
 
-| Action | Quand | Ce qu'elle fait |
-|---|---|---|
-| **Construire la base** | lundi, ou à la main | Liste les 100 mangas les plus populaires et jusqu'à 40 personnages par manga → `data/base.json` |
-| **Constituer le corpus** | lundi après la base, ou à la main | Pour chaque personnage : fiche détaillée, traduction française (si clé Mistral), image noir et blanc → `data/fiches/<id>.json` et `images/<id>.png`. Reprend où elle s'était arrêtée et enregistre tous les 250 personnages. |
-| **Personnage au hasard** | toutes les heures | Tire une fiche du corpus (sans répéter les 1 000 dernières) → `data/personnage.json`. Aucun appel réseau. |
+## Les Actions (toutes lancées à la main)
 
-## Installation (sans terminal)
+| Action | Ce qu'elle fait |
+|---|---|
+| **Construire la base** | Manga : les N mangas les plus populaires d'AniList, jusqu'à X personnages chacun, plus des séries complètes au choix (ex. `Dragon Ball`) → `data/base.json` |
+| **Constituer le corpus** | Manga : résumé français (Mistral) + image noir et blanc pour chaque nouveau personnage → `data/fiches/`, `images/`, puis publie le tirage `data/tirage/0.json … N.json` |
+| **JV — Construire la base** | Jeux vidéo : les N personnages les plus populaires d'IGDB (défaut 5 000) avec leurs jeux → `data/jv/base.json` |
+| **JV — Constituer le corpus** | Jeux vidéo : résumé et rôle en français + image → `data/jv/fiches/`, `images/jv/`, puis le tirage `data/jv/tirage/` |
 
-1. Sur github.com, crée un dépôt **public** nommé `trmnl-manga-scouter`.
-2. Dépose-y tout le contenu de ce dossier avec **GitHub Desktop** (le dossier `.github` doit bien être inclus).
-3. *(Facultatif, pour les fiches en français)* **Settings → Secrets and variables → Actions → New repository secret** : nom `MISTRAL_API_KEY`, valeur = ta clé Mistral. À faire **avant** de constituer le corpus, sinon les fiches resteront en anglais.
-4. **Actions → Construire la base → Run workflow** (3 à 5 minutes).
-5. **Actions → Constituer le corpus → Run workflow**. C'est la grosse étape : environ 2 à 3 heures pour 3 500 personnages. Si elle s'arrête avant la fin (message « Budget atteint » dans les logs), relance-la : elle reprend où elle en était.
-6. **Actions → Personnage au hasard → Run workflow**.
-7. Sur trmnl.com → **Plugins → Private Plugin** :
-   - Strategy : **Polling**
-   - Polling URL : `https://raw.githubusercontent.com/nbbou81000/trmnl-manga-scouter/main/data/personnage.json`
-   - Refresh rate : toutes les heures
-   - Colle `markup/full.liquid`, `half_horizontal.liquid`, `half_vertical.liquid` et `quadrant.liquid` dans les onglets correspondants de **Edit Markup**.
+Les deux « Constituer le corpus » ont un champ **Nombre de fiches** : `10` pour un test, `0` pour tout traiter. Ils reprennent où ils se sont arrêtés et enregistrent tous les 150 personnages. À la fin, les logs indiquent le nombre maximum à reporter dans l'URL de polling.
+
+## Secrets nécessaires
+
+| Secret | Usage |
+|---|---|
+| `MISTRAL_API_KEY` | Résumés en français (sans lui, fiches en anglais) |
+| `IGDB_CLIENT_ID`, `IGDB_CLIENT_SECRET` | Accès IGDB (application gratuite sur dev.twitch.tv) |
+
+## Configuration TRMNL
+
+- **Strategy** : Polling
+- **Form Fields** : contenu de `markup/form-fields.yml` (menu « Univers » : Manga, Jeux vidéo, Les deux)
+- **Polling URL** : contenu de `markup/polling-url.txt` — mettre à jour les deux maximums (`random_number: 0, …`) après chaque nouveau corpus
+- **Markup Full** : `markup/full.liquid` (affiche une fiche manga ou jeu vidéo selon le type)
+
+## Fiche jeu vidéo
+
+Franchise, rôle, première apparition (jeu et année), développeur, plateformes d'origine, genres, nombre de jeux, espèce, sexe, origine, rang de popularité, résumé, et les trois jeux phares.
 
 ## Taille du dépôt
 
-Chaque image pèse environ 80 Ko : compte 250 à 350 Mo pour le corpus complet, sous la limite recommandée de GitHub (1 Go).
+Environ 80 Ko par image : ~250 Mo pour 3 000 personnages manga, ~400 Mo pour 5 000 personnages de jeux vidéo. GitHub recommande de rester sous 1 Go.
 
-## Réglages
-
-- Plus de mangas ou de personnages : lance **Construire la base** à la main en changeant les deux champs, puis **Constituer le corpus** (seuls les nouveaux personnages sont traités).
-- Rythme des tirages : ligne `cron` de `.github/workflows/personnage-au-hasard.yml`.
-
-Usage personnel uniquement : les images et biographies proviennent de MyAnimeList et appartiennent à leurs ayants droit.
+Usage personnel uniquement : les images et descriptions proviennent d'AniList et d'IGDB et appartiennent à leurs ayants droit.

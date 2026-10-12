@@ -1,0 +1,43 @@
+name: JV — Construire la base
+
+on:
+  workflow_dispatch:
+    inputs:
+      nb_personnages:
+        description: 'Nombre de personnages de jeux vidéo les plus populaires à garder'
+        default: '5000'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: jv-base
+  cancel-in-progress: false
+
+jobs:
+  base:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: |
+            scripts
+            data/jv
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Collecter les personnages sur IGDB
+        env:
+          IGDB_CLIENT_ID: ${{ secrets.IGDB_CLIENT_ID }}
+          IGDB_CLIENT_SECRET: ${{ secrets.IGDB_CLIENT_SECRET }}
+          NB_PERSONNAGES: ${{ github.event.inputs.nb_personnages || '5000' }}
+        run: node scripts/jv-build-db.js
+      - name: Enregistrer
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add data/jv/base.json
+          git diff --cached --quiet || git commit -m "Base JV mise à jour"
+          git pull --rebase
+          git push

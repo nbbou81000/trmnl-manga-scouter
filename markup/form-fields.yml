@@ -1,0 +1,9 @@
+- keyname: univers
+  field_type: select
+  name: Univers
+  description: Personnages de manga, de jeux vidéo, ou un mélange des deux.
+  options:
+  - "Manga: manga"
+  - "Jeux vidéo: jv"
+  - "Les deux: mix"
+  default: manga

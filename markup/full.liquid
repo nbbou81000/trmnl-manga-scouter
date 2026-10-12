@@ -1,0 +1,42 @@
+<div class="layout layout--row layout--stretch gap--large" style="align-items: stretch;">
+  <div class="flex flex--col gap--small" style="flex: 1 1 0; min-width: 0; align-items: stretch; text-align: left;">
+    <span class="title title--large" data-clamp="1" style="text-align: left;">{{ nom }}</span>
+    {% if type == "jv" %}
+      {% if alias != "" %}<span class="label label--small" data-clamp="1" style="text-align: left;">« {{ alias }} »</span>{% endif %}
+    {% else %}
+      {% if surnom != "" %}<span class="label label--small" data-clamp="1" style="text-align: left;">« {{ surnom }} »</span>{% endif %}
+    {% endif %}
+    <div class="divider"></div>
+
+    <div style="display: grid; grid-template-columns: 34% 1fr; column-gap: 12px; row-gap: 5px; width: 100%; align-items: baseline;">
+      {% if type == "jv" %}
+        {% for l in lignes limit: 8 %}
+        <span class="label" data-clamp="1">{{ l.label }}</span><span class="description" data-clamp="1">{{ l.valeur }}</span>
+        {% endfor %}
+      {% else %}
+        <span class="label">MANGA</span><span class="description" data-clamp="1">{{ manga }}</span>
+        <span class="label">AUTEUR</span><span class="description" data-clamp="1">{{ auteurs }}</span>
+        <span class="label">RÔLE</span><span class="description">{{ role }}</span>
+        <span class="label">FANS</span><span class="description">{{ fans }}</span>
+        {% for s in stats limit: 4 %}
+        <span class="label" data-clamp="1">{{ s.label | upcase }}</span><span class="description" data-clamp="1">{{ s.valeur }}</span>
+        {% endfor %}
+      {% endif %}
+    </div>
+
+    <div class="divider"></div>
+    <span class="description" data-clamp="5" data-clamp-lg="9" style="text-align: left;">{{ resume }}</span>
+    {% if type == "jv" and jeux_phares != "" %}
+    <span class="label label--small" data-clamp="2" style="text-align: left;">JEUX PHARES · {{ jeux_phares }}</span>
+    {% endif %}
+  </div>
+
+  <div class="flex flex--col flex--center" style="flex: 0 0 38%;">
+    <img class="image image-dither image--contain" src="{{ image }}" style="width: 100%; height: 100%; object-fit: contain;">
+  </div>
+</div>
+
+<div class="title_bar">
+  <span class="title">{% if type == "jv" %}Scouter jeux vidéo{% else %}Scouter manga{% endif %}</span>
+  <span class="instance">{{ total_personnages }} personnages</span>
+</div>
