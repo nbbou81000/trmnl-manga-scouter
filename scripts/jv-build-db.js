@@ -33,11 +33,11 @@ async function jeton() {
   return (await rep.json()).access_token;
 }
 
-async function igdb(token, corps) {
+async function igdb(token, corps, endpoint = 'characters') {
   for (let essai = 1; essai <= 5; essai++) {
     await pause(300); // IGDB autorise 4 requêtes par seconde
     try {
-      const rep = await fetch('https://api.igdb.com/v4/characters', {
+      const rep = await fetch(`https://api.igdb.com/v4/${endpoint}`, {
         method: 'POST',
         headers: { 'Client-ID': CLIENT_ID, Authorization: `Bearer ${token}`, 'Content-Type': 'text/plain' },
         body: corps,
@@ -123,6 +123,11 @@ async function main() {
   }
   if (!champs) throw new Error('Aucune combinaison de champs acceptée par IGDB.');
 
+  // Comptage officiel IGDB, pour vérifier que la collecte est complète.
+  const total = await igdb(token, 'where id > 0;', 'characters/count');
+  const avecPortrait = await igdb(token, 'where mug_shot != null;', 'characters/count');
+  console.log(`IGDB : ${total.ok ? total.data.count : '?'} personnages au total, dont ${avecPortrait.ok ? avecPortrait.data.count : '?'} avec un portrait.`);
+
   // Tous les personnages illustrés, page par page (pagination par identifiant croissant).
   const tous = [];
   let dernier = 0;
@@ -134,8 +139,7 @@ async function main() {
       if (c.mug_shot && c.mug_shot.image_id) tous.push(analyser(c));
     }
     dernier = rep.data[rep.data.length - 1].id;
-    console.log(`${tous.length} personnages illustrés récupérés…`);
-    if (rep.data.length < PAR_PAGE) break;
+    console.log(`${tous.length} personnages illustrés récupérés (page de ${rep.data.length}, dernier id ${dernier})…`);
   }
 
   // On garde les plus populaires.
