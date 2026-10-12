@@ -225,7 +225,10 @@ async function chercherImages(lot) {
     const pages = await pagesDuWiki(slug, [...new Set(persos.map((p) => p.nom))]);
     for (const p of persos) {
       const pg = pages[p.nom];
-      if (!pg || !citeUnJeu(pg.texte, p.titres_jeux)) continue;
+      if (!pg) continue;
+      // Un nom complet (« Cloud Strife ») a peu d'homonymes ; un prénom seul (« Eustace ») doit être confirmé par un jeu cité.
+      const nomComplet = p.nom.trim().split(/\s+/).filter((m) => m.length > 2).length >= 2;
+      if (!nomComplet && !citeUnJeu(pg.texte, p.titres_jeux)) continue;
       const intro = texteIntro(pg.texte);
       if (intro.length > p.description.length) p.description = intro;
       if (pg.image && /\.(png|jpe?g|webp)/i.test(pg.image)) { p.image = pg.image; p.wiki = slug; p.source_image = 'Fandom'; }
