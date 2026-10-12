@@ -36,9 +36,11 @@ Personnage : ${p.nom}${p.alias ? ` (alias : ${p.alias})` : ''}
 Franchise : ${p.franchise || 'inconnue'} — Première apparition : ${p.premiere || 'inconnue'} — Jeux phares : ${p.jeux_phares}
 Description d'origine (anglais, peut être vide) : """${p.description.slice(0, 3000)}"""
 
-Réponds uniquement en JSON : {"resume": "...", "role": "..."}
+Réponds uniquement en JSON : {"resume": "...", "role": "...", "premiere": "...", "developpeur": "...", "plateformes": "..."}
 - "resume" : 2 ou 3 phrases en français, 330 caractères maximum, sans révéler de rebondissement majeur. Appuie-toi sur la description ; si elle est vide, n'utilise que les informations ci-dessus ou des faits dont tu es certain, sans rien inventer.
-- "role" : en 2 à 4 mots, le rôle du personnage dans son univers (ex. "Héros principal", "Antagoniste", "Mentor", "Allié", "Boss", "Personnage jouable"). Chaîne vide si tu n'es pas sûr.`;
+- "role" : en 2 à 4 mots, le rôle du personnage dans son univers (ex. "Héros principal", "Antagoniste", "Mentor", "Allié", "Boss", "Personnage jouable"). Chaîne vide si tu n'es pas sûr.
+- "premiere" : la toute PREMIÈRE apparition du personnage dans un jeu vidéo, au format "Titre (année)", UNIQUEMENT si tu en es certain et qu'elle diffère de "${p.premiere}" (la base de données est parfois incomplète). Sinon chaîne vide.
+- "developpeur" et "plateformes" : le studio et les plateformes d'origine (abréviations, 3 maximum) de CETTE première apparition, uniquement si tu as rempli "premiere" et que tu en es certain. Sinon chaînes vides.`;
   for (let essai = 1; essai <= 3; essai++) {
     const rep = await fetch('https://api.mistral.ai/v1/chat/completions', {
       method: 'POST',
@@ -59,10 +61,12 @@ Réponds uniquement en JSON : {"resume": "...", "role": "..."}
 
 // Image IGDB préparée pour l'e-ink : niveaux de gris, contraste et netteté renforcés, 16 niveaux de gris.
 async function preparerImage(url, destination) {
-  let rep = await fetch(url);
-  if (!rep.ok) rep = await fetch(url.replace('/t_720p/', '/t_cover_big/'));
+  const UA = { 'User-Agent': 'trmnl-scouter/1.0 (usage personnel; github.com/nbbou81000)' };
+  let rep = await fetch(url, { headers: UA });
+  if (!rep.ok && url.includes('/t_720p/')) rep = await fetch(url.replace('/t_720p/', '/t_cover_big/'));
   if (!rep.ok) throw new Error(`image ${rep.status}`);
   await sharp(Buffer.from(await rep.arrayBuffer()))
+    .flatten({ background: '#ffffff' }) // les rendus Fandom ont souvent un fond transparent
     .grayscale()
     .resize({ height: 800, withoutEnlargement: false, kernel: 'lanczos3' })
     .normalise()
@@ -81,7 +85,7 @@ function lignes(p, role) {
     p.developpeur && { label: 'DÉVELOPPEUR', valeur: p.developpeur },
     p.plateformes && { label: 'PLATEFORMES', valeur: p.plateformes },
     p.genres && { label: 'GENRES', valeur: p.genres },
-    { label: 'APPARITIONS', valeur: `${p.nb_jeux} jeu${p.nb_jeux > 1 ? 'x' : ''}` },
+    p.nb_jeux > 1 && { label: 'JEUX RECENSÉS', valeur: `${p.nb_jeux}` },
     p.espece && { label: 'ESPÈCE', valeur: p.espece },
     p.sexe && { label: 'SEXE', valeur: p.sexe },
     p.pays && { label: 'ORIGINE', valeur: p.pays },
@@ -132,7 +136,7 @@ async function main() {
 
   let faits = 0;
   let echecs = 0;
-  for (const p of aFaire) {
+  for (let p of aFaire) {
     if (tempsEcoule() > BUDGET_MIN) {
       console.log(`Budget de ${BUDGET_MIN} min atteint : relance l'Action pour continuer.`);
       break;
@@ -153,6 +157,9 @@ async function main() {
         const fr = await resumer(p);
         if (fr.resume) { resume = couper(fr.resume, 360); langue = 'fr'; }
         if (fr.role) role = String(fr.role).slice(0, 30);
+        if (fr.premiere && /\(\d{4}\)/.test(fr.premiere)) {
+          p = { ...p, premiere: String(fr.premiere).slice(0, 60), developpeur: fr.developpeur || '', plateformes: fr.plateformes || '' };
+        }
       } catch (e) {
         console.warn(`${p.nom} : résumé impossible (${e.message}), fiche en anglais.`);
       }
