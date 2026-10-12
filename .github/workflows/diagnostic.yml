@@ -7,7 +7,7 @@ jobs:
       - name: Giant Bomb
         run: |
           for u in "https://www.giantbomb.com/api/characters/?api_key=test&format=json&limit=1" "https://www.giantbomb.com/api/" ; do
-            echo "== $u"; curl -s -m 20 -A "trmnl-scouter-test" -o r.txt -w "HTTP %{http_code}\n" "$u"; head -c 400 r.txt; echo; done
+            echo "== $u"; curl -sL -m 20 -A "trmnl-scouter-test" -o r.txt -w "HTTP %{http_code} -> %{url_effective}\n" "$u"; head -c 400 r.txt; echo; done
       - name: Fandom (wiki des jeux)
         run: |
           curl -s -m 20 -o r.txt -w "HTTP %{http_code}\n" "https://zelda.fandom.com/api.php?action=query&prop=pageimages&titles=Link&pithumbsize=800&format=json"; head -c 400 r.txt; echo
