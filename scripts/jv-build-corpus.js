@@ -34,10 +34,10 @@ async function resumer(p) {
   const consigne = `Tu rédiges une fiche de personnage de jeu vidéo pour un petit écran e-ink, en français.
 Personnage : ${p.nom}${p.alias ? ` (alias : ${p.alias})` : ''}
 Franchise : ${p.franchise || 'inconnue'} — Première apparition : ${p.premiere || 'inconnue'} — Jeux phares : ${p.jeux_phares}
-Description d'origine (anglais, peut être vide) : """${p.description.slice(0, 3000)}"""
+Description d'origine (anglais, extraite d'IGDB ou du wiki du jeu, peut être vide) : """${p.description.slice(0, 3000)}"""
 
 Réponds uniquement en JSON : {"resume": "...", "role": "...", "premiere": "...", "developpeur": "...", "plateformes": "..."}
-- "resume" : 2 ou 3 phrases en français, 330 caractères maximum, sans révéler de rebondissement majeur. Appuie-toi sur la description ; si elle est vide, n'utilise que les informations ci-dessus ou des faits dont tu es certain, sans rien inventer.
+- "resume" : 2 ou 3 phrases en français, 330 caractères maximum, sans révéler de rebondissement majeur. Appuie-toi sur la description. Si elle est vide, n'utilise que les informations ci-dessus ou des faits dont tu es certain : une seule phrase factuelle sobre vaut mieux qu'un portrait vague. N'invente jamais de trait de caractère, d'affiliation ou d'événement, et évite les formules creuses (« mystérieux », « charismatique », « joue un rôle clé »).
 - "role" : en 2 à 4 mots, le rôle du personnage dans son univers (ex. "Héros principal", "Antagoniste", "Mentor", "Allié", "Boss", "Personnage jouable"). Chaîne vide si tu n'es pas sûr.
 - "premiere" : la toute PREMIÈRE apparition du personnage dans un jeu vidéo, au format "Titre (année)", UNIQUEMENT si tu en es certain et qu'elle diffère de "${p.premiere}" (la base de données est parfois incomplète). Sinon chaîne vide.
 - "developpeur" et "plateformes" : le studio et les plateformes d'origine (abréviations, 3 maximum) de CETTE première apparition, uniquement si tu as rempli "premiere" et que tu en es certain. Sinon chaînes vides.`;
@@ -68,7 +68,7 @@ async function preparerImage(url, destination) {
   await sharp(Buffer.from(await rep.arrayBuffer()))
     .flatten({ background: '#ffffff' }) // les rendus Fandom ont souvent un fond transparent
     .grayscale()
-    .resize({ height: 800, withoutEnlargement: false, kernel: 'lanczos3' })
+    .resize({ height: 720, withoutEnlargement: false, kernel: 'lanczos3' })
     .normalise()
     .linear(1.2, -20)
     .sharpen({ sigma: 1.1 })
@@ -89,7 +89,6 @@ function lignes(p, role) {
     p.espece && { label: 'ESPÈCE', valeur: p.espece },
     p.sexe && { label: 'SEXE', valeur: p.sexe },
     p.pays && { label: 'ORIGINE', valeur: p.pays },
-    { label: 'POPULARITÉ', valeur: `n° ${milliers(p.rang)}` },
   ].filter(Boolean);
 }
 
@@ -155,7 +154,7 @@ async function main() {
     if (MISTRAL_KEY) {
       try {
         const fr = await resumer(p);
-        if (fr.resume) { resume = couper(fr.resume, 360); langue = 'fr'; }
+        if (fr.resume && /[.!?…»")]\s*$/.test(fr.resume.trim())) { resume = couper(fr.resume.trim(), 360); langue = 'fr'; }
         if (fr.role) role = String(fr.role).slice(0, 30);
         if (fr.premiere && /\(\d{4}\)/.test(fr.premiere)) {
           p = { ...p, premiere: String(fr.premiere).slice(0, 60), developpeur: fr.developpeur || '', plateformes: fr.plateformes || '' };

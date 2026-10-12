@@ -6,6 +6,9 @@ on:
       nb_personnages:
         description: 'Nombre de personnages de jeux vidéo les plus populaires à garder'
         default: '5000'
+      max_par_franchise:
+        description: 'Nombre maximum de personnages par franchise (pour varier)'
+        default: '150'
 
 permissions:
   contents: write
@@ -32,6 +35,7 @@ jobs:
           IGDB_CLIENT_ID: ${{ secrets.IGDB_CLIENT_ID }}
           IGDB_CLIENT_SECRET: ${{ secrets.IGDB_CLIENT_SECRET }}
           NB_PERSONNAGES: ${{ github.event.inputs.nb_personnages || '5000' }}
+          MAX_PAR_FRANCHISE: ${{ github.event.inputs.max_par_franchise || '150' }}
         run: node scripts/jv-build-db.js
       - name: Enregistrer
         run: |

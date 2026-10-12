@@ -10,6 +10,7 @@ const path = require('path');
 const CLIENT_ID = process.env.IGDB_CLIENT_ID;
 const CLIENT_SECRET = process.env.IGDB_CLIENT_SECRET;
 const NB_PERSONNAGES = parseInt(process.env.NB_PERSONNAGES || '5000', 10);
+const MAX_PAR_FRANCHISE = parseInt(process.env.MAX_PAR_FRANCHISE || '150', 10);
 const SORTIE = path.join(__dirname, '..', 'data', 'jv', 'base.json');
 const PAR_PAGE = 500;
 
@@ -106,6 +107,7 @@ function analyser(c) {
     developpeur: dev ? dev.company.name : '',
     plateformes: premier ? (premier.platforms || []).map((p) => p.abbreviation).filter(Boolean).slice(0, 4).join(', ') : '',
     genres: genres.map((g) => GENRES_FR[g] || g).join(', '),
+    titres_jeux: jeux.map((g) => g.name),
     jeux_phares: phares.map((g) => `${g.name}${annee(g.first_release_date) ? ` (${annee(g.first_release_date)})` : ''}`).join(' · '),
   };
 }
@@ -156,25 +158,57 @@ async function trouverWiki(p) {
   return trouve;
 }
 
-async function imagesDuWiki(slug, noms) {
+// Texte brut de l'introduction d'une page (wikitexte de la section 0), sans modèles ni liens.
+function texteIntro(wikitexte) {
+  let t = wikitexte || '';
+  for (let i = 0; i < 6; i++) t = t.replace(/\{\{[^{}]*\}\}/g, '');
+  return t
+    .replace(/<ref[^>]*\/>/gi, '').replace(/<ref[^>]*>[\s\S]*?<\/ref>/gi, '')
+    .replace(/\[\[(?:File|Image|Fichier|Category|Catégorie):[^\]]*\]\]/gi, '')
+    .replace(/\[\[[^\]|]*\|([^\]]*)\]\]/g, '$1').replace(/\[\[([^\]]*)\]\]/g, '$1')
+    .replace(/\[https?:\S+ ([^\]]*)\]/g, '$1')
+    .replace(/'{2,}/g, '').replace(/<[^>]+>/g, '').replace(/__\w+__/g, '')
+    .replace(/\s+/g, ' ').trim().slice(0, 1500);
+}
+
+// La page doit citer l'un des jeux où IGDB situe le personnage, sinon c'est probablement un homonyme.
+function citeUnJeu(wikitexte, titres) {
+  const page = ` ${simplifier(wikitexte || '').replace(/[^a-z0-9]+/g, ' ')} `;
+  return titres.some((t) => {
+    const complet = simplifier(t).replace(/[^a-z0-9]+/g, ' ').trim();
+    const court = simplifier(t.split(/[:–—-]/)[0]).replace(/[^a-z0-9]+/g, ' ').trim();
+    return (complet.length >= 4 && page.includes(` ${complet} `)) || (court.length >= 6 && page.includes(` ${court} `));
+  });
+}
+
+async function pagesDuWiki(slug, noms) {
   const resultat = {};
   for (let i = 0; i < noms.length; i += 50) {
     const lot = noms.slice(i, i + 50);
-    const url = `https://${slug}.fandom.com/api.php?action=query&prop=pageimages&piprop=thumbnail&pithumbsize=1000&redirects=1&format=json&titles=${encodeURIComponent(lot.join('|'))}`;
+    const base = `https://${slug}.fandom.com/api.php?action=query&prop=pageimages|revisions&piprop=thumbnail&pithumbsize=1000&rvprop=content&rvslots=main&redirects=1&format=json&formatversion=2&titles=${encodeURIComponent(lot.join('|'))}`;
     try {
-      await pause(200);
-      const rep = await fetch(url, { headers: UA });
-      if (!rep.ok) continue;
-      const q = (await rep.json()).query || {};
+      await pause(250);
+      let rep = await fetch(`${base}&rvsection=0`, { headers: UA });
+      let json = rep.ok ? await rep.json() : null;
+      if (!json || json.error) { // certains wikis refusent rvsection en lot
+        await pause(250);
+        rep = await fetch(base, { headers: UA });
+        json = rep.ok ? await rep.json() : null;
+      }
+      const q = (json && json.query) || {};
       const vers = {};
       for (const n of q.normalized || []) vers[n.from] = n.to;
       for (const r of q.redirects || []) vers[r.from] = r.to;
       const pages = {};
-      for (const pg of Object.values(q.pages || {})) if (pg.thumbnail) pages[pg.title] = pg.thumbnail.source;
+      for (const pg of q.pages || []) {
+        const rev = pg.revisions && pg.revisions[0];
+        const texte = rev ? ((rev.slots && rev.slots.main && rev.slots.main.content) || rev.content || '') : '';
+        pages[pg.title] = { image: pg.thumbnail && pg.thumbnail.source, texte: texte.split(/\n==[^=]/)[0] };
+      }
       for (const nom of lot) {
         let t = vers[nom] || nom;
         t = vers[t] || t;
-        if (pages[t] && /\.(png|jpe?g|webp)/i.test(pages[t])) resultat[nom] = pages[t];
+        if (pages[t]) resultat[nom] = pages[t];
       }
     } catch { /* wiki momentanément indisponible : on passe */ }
   }
@@ -188,9 +222,13 @@ async function chercherImages(lot) {
     if (slug) (parWiki[slug] = parWiki[slug] || []).push(p);
   }
   for (const [slug, persos] of Object.entries(parWiki)) {
-    const images = await imagesDuWiki(slug, [...new Set(persos.map((p) => p.nom))]);
+    const pages = await pagesDuWiki(slug, [...new Set(persos.map((p) => p.nom))]);
     for (const p of persos) {
-      if (images[p.nom]) { p.image = images[p.nom]; p.wiki = slug; p.source_image = 'Fandom'; }
+      const pg = pages[p.nom];
+      if (!pg || !citeUnJeu(pg.texte, p.titres_jeux)) continue;
+      const intro = texteIntro(pg.texte);
+      if (intro.length > p.description.length) p.description = intro;
+      if (pg.image && /\.(png|jpe?g|webp)/i.test(pg.image)) { p.image = pg.image; p.wiki = slug; p.source_image = 'Fandom'; }
     }
   }
 }
@@ -234,6 +272,7 @@ async function main() {
   const candidats = tous.filter((p) => p.score > 0).sort((a, b) => b.score - a.score);
   console.log(`${tous.length} personnages au total, ${candidats.length} apparaissent dans des jeux notés. Recherche des images sur Fandom…`);
   const garde = [];
+  const parFranchise = {};
   const LOT = 300;
   for (let i = 0; i < candidats.length && garde.length < NB_PERSONNAGES; i += LOT) {
     const lot = candidats.slice(i, i + LOT);
@@ -241,11 +280,15 @@ async function main() {
     for (const p of lot) {
       if (garde.length >= NB_PERSONNAGES) break;
       if (!p.image && p.image_igdb) { p.image = p.image_igdb; p.source_image = 'IGDB'; }
-      if (p.image) garde.push(p);
+      const cle = p.franchise || p.premier_jeu;
+      if (p.image && (parFranchise[cle] || 0) < MAX_PAR_FRANCHISE) {
+        parFranchise[cle] = (parFranchise[cle] || 0) + 1;
+        garde.push(p);
+      }
     }
     console.log(`${Math.min(i + LOT, candidats.length)} candidats examinés, ${garde.length} avec image (${Object.values(cacheWikis).filter(Boolean).length} wikis trouvés).`);
   }
-  garde.forEach((p, i) => { p.rang = i + 1; delete p.image_igdb; });
+  garde.forEach((p, i) => { p.rang = i + 1; delete p.image_igdb; delete p.titres_jeux; });
 
   if (garde.length < 100) {
     console.error('Base anormalement petite : on garde l\'ancienne base et on s\'arrête en erreur.');
@@ -256,5 +299,5 @@ async function main() {
   console.log(`Base écrite : ${garde.length} personnages. Les 15 premiers : ${garde.slice(0, 15).map((p) => `${p.nom} [${p.wiki || 'IGDB'}]`).join(', ')}`);
 }
 
-module.exports = { analyser, slugsPossibles };
+module.exports = { analyser, slugsPossibles, texteIntro, citeUnJeu };
 if (require.main === module) main().catch((e) => { console.error(e); process.exit(1); });
