@@ -26,7 +26,7 @@ Les deux « Constituer le corpus » ont un champ **Nombre de fiches** : `10` pou
 
 - **Strategy** : Polling
 - **Form Fields** : contenu de `markup/form-fields.yml` (menu « Univers » : Manga, Jeux vidéo, Les deux)
-- **Polling URL** : contenu de `markup/polling-url.txt` — mettre à jour les deux maximums (`random_number: 0, …`) après chaque nouveau corpus
+- **Polling URL** : les deux lignes de `markup/polling-url.txt` (ligne 1 = manga → `IDX_0`, ligne 2 = jeux vidéo → `IDX_1`). Mettre à jour les deux maximums (`random_number: 0, …`) après chaque nouveau corpus
 - **Markup Full** : `markup/full.liquid` (affiche une fiche manga ou jeu vidéo selon le type)
 
 ## Fiche jeu vidéo
